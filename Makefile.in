@@ -22,17 +22,13 @@ FLATPAK ?= xfalse
 
 .PHONY: all
 ifeq ($(FLATPAK), xtrue)
-all: version umu umu-launcher
+all: umu-launcher
 else
-all: version umu umu-docs umu-launcher
+all: umu-docs umu-launcher
 endif
 
 .PHONY: install
-ifeq ($(USERINSTALL), xtrue)
-install: umu-install umu-launcher-install user-install fix_shebangs
-else
 install: umu-install umu-launcher-install fix_shebangs
-endif
 
 fix_shebangs:
 	$(info :: Fixing shebangs in $(DESTDIR)... )
@@ -55,12 +51,6 @@ umu/umu_version.json: umu/umu_version.json.in
 .PHONY: version
 version: umu/umu_version.json
 
-version-install: version
-	$(info :: Installing umu_version.json )
-	install -d $(DESTDIR)$(PYTHONDIR)/$(INSTALLDIR)
-	install -Dm 644 umu/umu_version.json -t $(DESTDIR)$(PYTHONDIR)/$(INSTALLDIR)
-
-
 $(OBJDIR)/.build-umu-docs: | $(OBJDIR)
 	$(info :: Building umu man pages )
 	scdoc < docs/umu.1.scd > $(OBJDIR)/umu.1
@@ -78,7 +68,7 @@ umu-docs-install: umu-docs
 	install -m644 $(OBJDIR)/umu.5 $(DESTDIR)$(MANDIR)/man5/umu.5
 
 
-$(OBJDIR)/.build-umu-dist: | $(OBJDIR)
+$(OBJDIR)/.build-umu-dist: version | $(OBJDIR)
 	$(info :: Building umu )
 	$(PYTHON_INTERPRETER) -m build --wheel --skip-dependency-check --no-isolation --outdir=$(OBJDIR)
 	touch $(@)
@@ -88,13 +78,12 @@ umu-dist: $(OBJDIR)/.build-umu-dist
 
 umu-dist-install: umu-dist
 	$(info :: Installing umu )
-	install -d $(DESTDIR)$(PYTHONDIR)/$(INSTALLDIR)
 	$(PYTHON_INTERPRETER)  -m installer --destdir=$(DESTDIR) $(OBJDIR)/*.whl
 
 ifeq ($(FLATPAK), xtrue)
-umu-install: version-install umu-dist-install
+umu-install: umu-dist-install
 else
-umu-install: version-install umu-dist-install umu-docs-install
+umu-install: umu-dist-install umu-docs-install
 endif
 
 ifeq ($(FLATPAK), xtrue)
@@ -171,11 +160,14 @@ uninstall:
 	@rm -rf -v --preserve-root=all $(DESTDIR)$(DATADIR)/$(INSTALLDIR)
 
 
+# pipx will make use of pyproject.toml and install everything in a local venv.
+# In dev environments, users should manually run pip install -f .
 .PHONY: user-install
-user-install:
-	$(info :: --- )
-	$(info :: Installed under user-only location "$(DATADIR)/$(INSTALLDIR)" )
-	$(info :: To run you need to make sure "$(BINDIR)" is in your PATH )
+user-install: version
+	pipx install .
 
+.PHONY: user-uninstall
+user-uninstall:
+	pipx uninstall $(PROJECT)
 
 # vim: ft=make
